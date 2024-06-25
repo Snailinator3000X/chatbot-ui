@@ -69,19 +69,23 @@ export const Import: FC<ImportProps> = ({}) => {
     tools: setTools
   }
 
-  const handleSelectFiles = async (e: any) => {
+  const handleSelectFiles = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return
+
     const filePromises = Array.from(e.target.files).map(file => {
-      return new Promise((resolve, reject) => {
+      return new Promise<Array<Record<string, any>>>((resolve, reject) => {
         const reader = new FileReader()
         reader.onload = event => {
           try {
             const data = JSON.parse(event.target?.result as string)
             resolve(Array.isArray(data) ? data : [data])
           } catch (error) {
-            reject(error)
+            reject(new Error(`Invalid JSON in file ${file.name}`))
           }
         }
-        reader.readAsText(file as Blob)
+        reader.onerror = () =>
+          reject(new Error(`Failed to read file ${file.name}`))
+        reader.readAsText(file)
       })
     })
 
@@ -104,9 +108,11 @@ export const Import: FC<ImportProps> = ({}) => {
           "prompts",
           "files",
           "collections",
-          "assistants"
-        ]
-        const newCounts: any = { ...prevCounts }
+          "assistants",
+          "tools"
+        ] as const
+
+        const newCounts = { ...prevCounts }
         countTypes.forEach(type => {
           newCounts[type] = uniqueResults.filter(
             item => item.contentType === type
@@ -114,8 +120,13 @@ export const Import: FC<ImportProps> = ({}) => {
         })
         return newCounts
       })
+
+      toast.success(`Successfully imported ${uniqueResults.length} items`)
     } catch (error) {
       console.error(error)
+      toast.error(
+        error instanceof Error ? error.message : "Failed to import files"
+      )
     }
   }
 

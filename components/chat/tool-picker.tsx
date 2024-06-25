@@ -15,6 +15,8 @@ export const ToolPicker: FC<ToolPickerProps> = ({}) => {
     setIsToolPickerOpen
   } = useContext(ChatbotUIContext)
 
+  console.log("Alle Tools:", tools) // Logging hinzufügen
+
   const { handleSelectTool } = usePromptAndCommand()
 
   const itemsRef = useRef<(HTMLDivElement | null)[]>([])

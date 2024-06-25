@@ -1,0 +1,8 @@
+appId: com.example.chatbotui
+productName: Chatbot UI
+directories:
+  output: dist
+  buildResources: public
+files:
+  - 'out/**/*'
+  - 'electron/**/*'

@@ -1,66 +1,42 @@
-import { Database } from "@/supabase/types"
-import { ChatSettings } from "@/types"
-import { createClient } from "@supabase/supabase-js"
-import { OpenAIStream, StreamingTextResponse } from "ai"
-import { ServerRuntime } from "next"
-import OpenAI from "openai"
-import { ChatCompletionCreateParamsBase } from "openai/resources/chat/completions.mjs"
+import { NextRequest, NextResponse } from "next/server"
+import { Groq } from "groq-sdk"
+import { Blob, File } from "buffer"
 
-export const runtime: ServerRuntime = "edge"
+const client = new Groq({
+  apiKey: process.env.GROQ_API_KEY
+})
 
-export async function POST(request: Request) {
-  const json = await request.json()
-  const { chatSettings, messages, customModelId } = json as {
-    chatSettings: ChatSettings
-    messages: any[]
-    customModelId: string
-  }
-
+export async function POST(req: NextRequest) {
   try {
-    const supabaseAdmin = createClient<Database>(
-      process.env.NEXT_PUBLIC_SUPABASE_URL!,
-      process.env.SUPABASE_SERVICE_ROLE_KEY!
+    const formData = await req.formData()
+    const audioFile = formData.get("audioBlob") as unknown as File
+
+    if (!audioFile) {
+      return NextResponse.json(
+        { error: "No audio file provided" },
+        { status: 400 }
+      )
+    }
+
+    const arrayBuffer = await audioFile.arrayBuffer()
+    const buffer = Buffer.from(arrayBuffer)
+
+    const blob = new Blob([buffer])
+    const file = new File([blob], "audio.wav", { type: "audio/wav" })
+
+    const response = await client.audio.transcriptions.create({
+      file: file,
+      model: "whisper-large-v3"
+    })
+
+    return NextResponse.json({ text: response.text })
+  } catch (error) {
+    console.error("Transcription error:", error)
+    const errorMessage =
+      error instanceof Error ? error.message : "Unknown error"
+    return NextResponse.json(
+      { error: "Transcription failed", details: errorMessage },
+      { status: 500 }
     )
-
-    const { data: customModel, error } = await supabaseAdmin
-      .from("models")
-      .select("*")
-      .eq("id", customModelId)
-      .single()
-
-    if (!customModel) {
-      throw new Error(error.message)
-    }
-
-    const custom = new OpenAI({
-      apiKey: customModel.api_key || "",
-      baseURL: customModel.base_url
-    })
-
-    const response = await custom.chat.completions.create({
-      model: chatSettings.model as ChatCompletionCreateParamsBase["model"],
-      messages: messages as ChatCompletionCreateParamsBase["messages"],
-      temperature: chatSettings.temperature,
-      stream: true
-    })
-
-    const stream = OpenAIStream(response)
-
-    return new StreamingTextResponse(stream)
-  } catch (error: any) {
-    let errorMessage = error.message || "An unexpected error occurred"
-    const errorCode = error.status || 500
-
-    if (errorMessage.toLowerCase().includes("api key not found")) {
-      errorMessage =
-        "Custom API Key not found. Please set it in your profile settings."
-    } else if (errorMessage.toLowerCase().includes("incorrect api key")) {
-      errorMessage =
-        "Custom API Key is incorrect. Please fix it in your profile settings."
-    }
-
-    return new Response(JSON.stringify({ message: errorMessage }), {
-      status: errorCode
-    })
   }
 }

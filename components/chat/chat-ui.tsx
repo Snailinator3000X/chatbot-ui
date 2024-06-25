@@ -22,14 +22,12 @@ import { ChatSecondaryButtons } from "./chat-secondary-buttons"
 interface ChatUIProps {}
 
 export const ChatUI: FC<ChatUIProps> = ({}) => {
-  useHotkey("o", () => handleNewChat())
-
-  const params = useParams()
-
   const {
+    chatMessages,
     setChatMessages,
     selectedChat,
     setSelectedChat,
+    chatSettings,
     setChatSettings,
     setChatImages,
     assistants,
@@ -40,6 +38,12 @@ export const ChatUI: FC<ChatUIProps> = ({}) => {
     setUseRetrieval,
     setSelectedTools
   } = useContext(ChatbotUIContext)
+
+  console.log("Rendering ChatUI", { chatMessages, selectedChat, chatSettings })
+
+  useHotkey("o", () => handleNewChat())
+
+  const params = useParams()
 
   const { handleNewChat, handleFocusChatInput } = useChatHandler()
 

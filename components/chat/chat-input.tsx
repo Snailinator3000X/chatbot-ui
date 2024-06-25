@@ -6,7 +6,8 @@ import {
   IconBolt,
   IconCirclePlus,
   IconPlayerStopFilled,
-  IconSend
+  IconSend,
+  IconMicrophone
 } from "@tabler/icons-react"
 import Image from "next/image"
 import { FC, useContext, useEffect, useRef, useState } from "react"
@@ -20,42 +21,27 @@ import { useChatHandler } from "./chat-hooks/use-chat-handler"
 import { useChatHistoryHandler } from "./chat-hooks/use-chat-history"
 import { usePromptAndCommand } from "./chat-hooks/use-prompt-and-command"
 import { useSelectFileHandler } from "./chat-hooks/use-select-file-handler"
+import { transcribeSpeech } from "@/lib/audio/transcribe"
 
 interface ChatInputProps {}
 
-export const ChatInput: FC<ChatInputProps> = ({}) => {
+export const ChatInput: FC<ChatInputProps> = () => {
   const { t } = useTranslation()
-
-  useHotkey("l", () => {
-    handleFocusChatInput()
-  })
-
-  const [isTyping, setIsTyping] = useState<boolean>(false)
-
   const {
-    isAssistantPickerOpen,
-    focusAssistant,
-    setFocusAssistant,
     userInput,
+    setUserInput,
     chatMessages,
     isGenerating,
-    selectedPreset,
-    selectedAssistant,
-    focusPrompt,
-    setFocusPrompt,
-    focusFile,
-    focusTool,
-    setFocusTool,
-    isToolPickerOpen,
-    isPromptPickerOpen,
-    setIsPromptPickerOpen,
-    isFilePickerOpen,
-    setFocusFile,
     chatSettings,
+    selectedAssistant,
     selectedTools,
     setSelectedTools,
     assistantImages
   } = useContext(ChatbotUIContext)
+
+  const [isTyping, setIsTyping] = useState<boolean>(false)
+  const [isRecording, setIsRecording] = useState(false)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
 
   const {
     chatInputRef,
@@ -68,76 +54,18 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
 
   const { filesToAccept, handleSelectDeviceFile } = useSelectFileHandler()
 
-  const {
-    setNewMessageContentToNextUserMessage,
-    setNewMessageContentToPreviousUserMessage
-  } = useChatHistoryHandler()
-
   const fileInputRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
     setTimeout(() => {
       handleFocusChatInput()
-    }, 200) // FIX: hacky
-  }, [selectedPreset, selectedAssistant])
+    }, 200)
+  }, [selectedAssistant])
 
   const handleKeyDown = (event: React.KeyboardEvent) => {
     if (!isTyping && event.key === "Enter" && !event.shiftKey) {
       event.preventDefault()
-      setIsPromptPickerOpen(false)
       handleSendMessage(userInput, chatMessages, false)
-    }
-
-    // Consolidate conditions to avoid TypeScript error
-    if (
-      isPromptPickerOpen ||
-      isFilePickerOpen ||
-      isToolPickerOpen ||
-      isAssistantPickerOpen
-    ) {
-      if (
-        event.key === "Tab" ||
-        event.key === "ArrowUp" ||
-        event.key === "ArrowDown"
-      ) {
-        event.preventDefault()
-        // Toggle focus based on picker type
-        if (isPromptPickerOpen) setFocusPrompt(!focusPrompt)
-        if (isFilePickerOpen) setFocusFile(!focusFile)
-        if (isToolPickerOpen) setFocusTool(!focusTool)
-        if (isAssistantPickerOpen) setFocusAssistant(!focusAssistant)
-      }
-    }
-
-    if (event.key === "ArrowUp" && event.shiftKey && event.ctrlKey) {
-      event.preventDefault()
-      setNewMessageContentToPreviousUserMessage()
-    }
-
-    if (event.key === "ArrowDown" && event.shiftKey && event.ctrlKey) {
-      event.preventDefault()
-      setNewMessageContentToNextUserMessage()
-    }
-
-    //use shift+ctrl+up and shift+ctrl+down to navigate through chat history
-    if (event.key === "ArrowUp" && event.shiftKey && event.ctrlKey) {
-      event.preventDefault()
-      setNewMessageContentToPreviousUserMessage()
-    }
-
-    if (event.key === "ArrowDown" && event.shiftKey && event.ctrlKey) {
-      event.preventDefault()
-      setNewMessageContentToNextUserMessage()
-    }
-
-    if (
-      isAssistantPickerOpen &&
-      (event.key === "Tab" ||
-        event.key === "ArrowUp" ||
-        event.key === "ArrowDown")
-    ) {
-      event.preventDefault()
-      setFocusAssistant(!focusAssistant)
     }
   }
 
@@ -162,6 +90,58 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
     }
   }
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
+      const mediaRecorder = new MediaRecorder(stream)
+      mediaRecorderRef.current = mediaRecorder
+
+      let audioChunks: Blob[] = []
+
+      mediaRecorder.ondataavailable = (event: BlobEvent) => {
+        audioChunks.push(event.data)
+      }
+
+      mediaRecorder.onstop = async () => {
+        const audioBlob = new Blob(audioChunks, { type: "audio/wav" })
+        console.log("Audio blob size:", audioBlob.size, "bytes")
+
+        try {
+          const text = await transcribeSpeech(audioBlob)
+          setUserInput(text)
+        } catch (error) {
+          console.error("Error transcribing speech:", error)
+          toast.error(
+            `Failed to transcribe speech: ${error instanceof Error ? error.message : "Unknown error"}`
+          )
+        }
+      }
+
+      mediaRecorder.start()
+      setIsRecording(true)
+    } catch (error) {
+      console.error("Error starting recording:", error)
+      toast.error(
+        "Failed to start recording. Please check your microphone permissions."
+      )
+    }
+  }
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && isRecording) {
+      mediaRecorderRef.current.stop()
+      setIsRecording(false)
+    }
+  }
+
+  const handleMicClick = () => {
+    if (isRecording) {
+      stopRecording()
+    } else {
+      startRecording()
+    }
+  }
+
   return (
     <>
       <div className="flex flex-col flex-wrap justify-center gap-2">
@@ -182,7 +162,6 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
             >
               <div className="flex cursor-pointer items-center justify-center space-x-1 rounded-lg bg-purple-600 px-3 py-1 hover:opacity-50">
                 <IconBolt size={20} />
-
                 <div>{tool.name}</div>
               </div>
             </div>
@@ -203,7 +182,6 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
                 alt={selectedAssistant.name}
               />
             )}
-
             <div className="text-sm font-bold">
               Talking to {selectedAssistant.name}
             </div>
@@ -211,7 +189,7 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
         )}
       </div>
 
-      <div className="border-input relative mt-3 flex min-h-[60px] w-full items-center justify-center rounded-xl border-2">
+      <div className="border-input bg-background relative mt-3 flex min-h-[60px] w-full items-center justify-center rounded-xl border-2">
         <div className="absolute bottom-[76px] left-0 max-h-[300px] w-full overflow-auto rounded-xl dark:border-none">
           <ChatCommandInput />
         </div>
@@ -219,30 +197,38 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
         <>
           <IconCirclePlus
             className="absolute bottom-[12px] left-3 cursor-pointer p-1 hover:opacity-50"
-            size={32}
             onClick={() => fileInputRef.current?.click()}
+            size={32}
           />
 
-          {/* Hidden input to select files from device */}
-          <Input
+          <input
+            type="file"
             ref={fileInputRef}
             className="hidden"
-            type="file"
-            onChange={e => {
-              if (!e.target.files) return
-              handleSelectDeviceFile(e.target.files[0])
-            }}
             accept={filesToAccept}
+            multiple
+            onChange={e => {
+              const selectedFiles = e.target.files
+              if (selectedFiles) {
+                Array.from(selectedFiles).forEach(file => {
+                  handleSelectDeviceFile(file)
+                })
+              }
+            }}
           />
         </>
 
+        <IconMicrophone
+          className="absolute bottom-[12px] left-12 cursor-pointer p-1 hover:opacity-50"
+          size={32}
+          onClick={handleMicClick}
+          style={{ color: isRecording ? "red" : "inherit" }}
+        />
+
         <TextareaAutosize
           textareaRef={chatInputRef}
-          className="ring-offset-background placeholder:text-muted-foreground focus-visible:ring-ring text-md flex w-full resize-none rounded-md border-none bg-transparent px-14 py-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-50"
-          placeholder={t(
-            // `Ask anything. Type "@" for assistants, "/" for prompts, "#" for files, and "!" for tools.`
-            `Ask anything. Type @  /  #  !`
-          )}
+          className="placeholder:text-secondary-foreground/50 text-secondary-foreground ml-24 mr-14 w-full resize-none rounded-lg border-0 bg-transparent p-2 focus:outline-none"
+          placeholder={t(`Ask anything. Type @  /  #  !`)}
           onValueChange={handleInputChange}
           value={userInput}
           minRows={1}
@@ -268,7 +254,6 @@ export const ChatInput: FC<ChatInputProps> = ({}) => {
               )}
               onClick={() => {
                 if (!userInput) return
-
                 handleSendMessage(userInput, chatMessages, false)
               }}
               size={30}

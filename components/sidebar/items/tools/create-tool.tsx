@@ -7,6 +7,7 @@ import { TOOL_DESCRIPTION_MAX, TOOL_NAME_MAX } from "@/db/limits"
 import { validateOpenAPI } from "@/lib/openapi-conversion"
 import { TablesInsert } from "@/supabase/types"
 import { FC, useContext, useState } from "react"
+import { Checkbox } from "@/components/ui/checkbox"
 
 interface CreateToolProps {
   isOpen: boolean
@@ -25,6 +26,20 @@ export const CreateTool: FC<CreateToolProps> = ({ isOpen, onOpenChange }) => {
   const [schemaError, setSchemaError] = useState("")
 
   if (!profile || !selectedWorkspace) return null
+
+  const handleCreateTool = async () => {
+    const newTool = {
+      user_id: profile.user_id,
+      name,
+      description,
+      url,
+      custom_headers: customHeaders,
+      schema
+    } as TablesInsert<"tools">
+
+    console.log("Neues Tool erstellt:", newTool)
+    // ... Aktualisierung des States ...
+  }
 
   return (
     <SidebarCreateItem
@@ -65,35 +80,104 @@ export const CreateTool: FC<CreateToolProps> = ({ isOpen, onOpenChange }) => {
             />
           </div>
 
-          {/* <div className="space-y-1">
-            <Label>URL</Label>
-
-            <Input
-              placeholder="Tool url..."
-              value={url}
-              onChange={e => setUrl(e.target.value)}
-            />
-          </div> */}
-
-          {/* <div className="space-y-3 pt-4 pb-3">
-            <div className="space-x-2 flex items-center">
-              <Checkbox />
-
-              <Label>Web Browsing</Label>
+          <div className="space-y-3 pb-3 pt-4">
+            <div className="flex items-center space-x-2">
+              <Checkbox
+                id="internet-search"
+                checked={name === "Internet Search"}
+                onCheckedChange={checked => {
+                  if (checked) {
+                    setName("Internet Search")
+                    setDescription("Search the internet using DuckDuckGo")
+                    setUrl("https://api.duckduckgo.com")
+                    setCustomHeaders("{}")
+                    setSchema(`{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "DuckDuckGo Search API",
+    "description": "Search the internet using DuckDuckGo",
+    "version": "v1.0.0"
+  },
+  "servers": [
+    {
+      "url": "https://api.duckduckgo.com"
+    }
+  ],
+  "paths": {
+    "/": {
+      "get": {
+        "description": "Perform a DuckDuckGo search",
+        "operationId": "duckDuckGoSearch",
+        "parameters": [
+          {
+            "name": "q",
+            "in": "query",
+            "description": "The search query",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "format",
+            "in": "query",
+            "description": "The response format",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["json"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Successful response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "AbstractText": {
+                      "type": "string"
+                    },
+                    "Results": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "FirstURL": {
+                            "type": "string"
+                          },
+                          "Text": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}`)
+                  } else {
+                    setName("")
+                    setDescription("")
+                    setUrl("")
+                    setCustomHeaders("")
+                    setSchema("")
+                  }
+                }}
+              />
+              <Label htmlFor="internet-search">
+                Internet Search (DuckDuckGo)
+              </Label>
             </div>
-
-            <div className="space-x-2 flex items-center">
-              <Checkbox />
-
-              <Label>Image Generation</Label>
-            </div>
-
-            <div className="space-x-2 flex items-center">
-              <Checkbox />
-
-              <Label>Code Interpreter</Label>
-            </div>
-          </div> */}
+          </div>
 
           <div className="space-y-1">
             <Label>Custom Headers</Label>
